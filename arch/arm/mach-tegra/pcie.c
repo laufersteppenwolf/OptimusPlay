@@ -577,7 +577,7 @@ static int tegra_pcie_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 	return INT_PCIE_INTR;
 }
 
-static struct pci_bus *tegra_pcie_scan_bus(int nr,
+static struct pci_bus __init *tegra_pcie_scan_bus(int nr,
 						  struct pci_sys_data *sys)
 {
 	struct tegra_pcie_port *pp;
@@ -591,7 +591,7 @@ static struct pci_bus *tegra_pcie_scan_bus(int nr,
 	return pci_scan_bus(sys->busnr, &tegra_pcie_ops, sys);
 }
 
-static struct hw_pci tegra_pcie_hw = {
+static struct hw_pci tegra_pcie_hw  __initdata = {
 	.nr_controllers	= MAX_PCIE_SUPPORTED_PORTS,
 	.preinit	= tegra_pcie_preinit,
 	.setup		= tegra_pcie_setup,
@@ -1331,7 +1331,7 @@ err_irq:
 	return err;
 }
 
-static int tegra_pcie_probe(struct platform_device *pdev)
+static int __init tegra_pci_probe(struct platform_device *pdev)
 {
 	int ret;
 
@@ -1451,9 +1451,9 @@ static const struct dev_pm_ops tegra_pcie_pm_ops = {
 	};
 #endif
 
-static struct platform_driver tegra_pcie_driver = {
-	.probe   = tegra_pcie_probe,
-	.remove  = tegra_pcie_remove,
+static struct platform_driver tegra_pci_driver __refdata = {
+	.probe   = tegra_pci_probe,
+	.remove  = tegra_pci_remove,
 	.driver  = {
 		.name  = "tegra-pcie",
 		.owner = THIS_MODULE,
