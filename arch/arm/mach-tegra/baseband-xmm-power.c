@@ -499,24 +499,23 @@ void baseband_xmm_set_power_status(unsigned int status)
 		
 	case BBXMM_PS_L3:
 		if (baseband_xmm_powerstate == BBXMM_PS_L2TOL0) {
-				if (!data->modem.xmm.ipc_ap_wake) {
-						spin_lock_irqsave(&xmm_lock, flags);
-						wakeup_pending = true;
-						spin_unlock_irqrestore(&xmm_lock, flags);
-					pr_debug("%s: L2 race condition-CP wakeup" " pending\n", __func__);
-				}
-		}	
-		pr_debug("PM_ST : L3\n");
-		baseband_xmm_powerstate = status;
-		spin_lock_irqsave(&xmm_lock, flags);
-		system_suspending = false;
-		spin_unlock_irqrestore(&xmm_lock, flags);
+			if (!gpio_get_value(data->modem.xmm.ipc_ap_wake)) {
+				spin_lock_irqsave(&xmm_lock, flags);
+				wakeup_pending = true;
+				spin_unlock_irqrestore(&xmm_lock, flags);
+				pr_info("%s: L2 race condition-CP wakeup"
+						" pending\n", __func__);
+			}
+		}
+		pr_info("L3\n");
 		if (wake_lock_active(&wakelock)) {
 			pr_debug("%s: releasing wakelock before L3\n", __func__);
 			wake_unlock(&wakelock);
 		}
-		gpio_set_value(data->modem.xmm.ipc_hsic_active, 0);
-		pr_debug("GPIO [W]: Host_active -> 0 \n"); 
+		if (wakeup_pending == false) {
+			gpio_set_value(data->modem.xmm.ipc_hsic_active, 0);
+			pr_debug("gpio host active low->\n");
+		}
 		break;
 	case BBXMM_PS_L2TOL0:
 		spin_lock_irqsave(&xmm_lock, flags);
