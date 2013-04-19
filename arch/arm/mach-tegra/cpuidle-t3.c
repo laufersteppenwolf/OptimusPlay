@@ -40,7 +40,7 @@
 #include <linux/clk.h>
 
 #include <asm/cacheflush.h>
-#include <asm/cpu_pm.h>
+#include <linux/cpu_pm.h>
 #include <asm/hardware/gic.h>
 #include <asm/localtimer.h>
 
