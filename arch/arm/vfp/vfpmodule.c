@@ -8,7 +8,6 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
-#include <linux/module.h>
 #include <linux/types.h>
 #include <linux/cpu.h>
 #include <linux/cpu_pm.h>
@@ -19,8 +18,12 @@
 #include <linux/sched.h>
 #include <linux/smp.h>
 #include <linux/init.h>
+#include <linux/uaccess.h>
+#include <linux/user.h>
 
+//#include <asm/cp15.h>
 #include <asm/cputype.h>
+//#include <asm/system_info.h>
 #include <asm/thread_notify.h>
 #include <asm/vfp.h>
 
@@ -208,35 +211,6 @@ static int vfp_notifier(struct notifier_block *self, unsigned long cmd, void *v)
 
 static struct notifier_block vfp_notifier_block = {
 	.notifier_call	= vfp_notifier,
-};
-
-static int vfp_cpu_pm_notifier(struct notifier_block *self, unsigned long cmd,
-	void *v)
-{
-	u32 fpexc = fmrx(FPEXC);
-	unsigned int cpu = smp_processor_id();
-
-	switch (cmd) {
-	case CPU_PM_ENTER:
-		if (vfp_current_hw_state[cpu]) {
-			fmxr(FPEXC, fpexc | FPEXC_EN);
-			vfp_save_state(vfp_current_hw_state[cpu], fpexc);
-			/* force a reload when coming back from idle */
-			vfp_current_hw_state[cpu] = NULL;
-			fmxr(FPEXC, fpexc & ~FPEXC_EN);
-		}
-		break;
-	case CPU_PM_ENTER_FAILED:
-	case CPU_PM_EXIT:
-		/* make sure VFP is disabled when leaving idle */
-		fmxr(FPEXC, fpexc & ~FPEXC_EN);
-		break;
-	}
-	return NOTIFY_OK;
-}
-
-static struct notifier_block vfp_cpu_pm_notifier_block = {
-	.notifier_call = vfp_cpu_pm_notifier,
 };
 
 /*
@@ -439,7 +413,7 @@ void VFP_bounce(u32 trigger, u32 fpexc, struct pt_regs *regs)
 	 * If there isn't a second FP instruction, exit now. Note that
 	 * the FPEXC.FP2V bit is valid only if FPEXC.EX is 1.
 	 */
-	if (fpexc ^ (FPEXC_EX | FPEXC_FP2V))
+	if ((fpexc & (FPEXC_EX | FPEXC_FP2V)) != (FPEXC_EX | FPEXC_FP2V))
 		goto exit;
 
 	/*
@@ -484,19 +458,21 @@ static int vfp_pm_suspend(void)
 
 	/* if vfp is on, then save state for resumption */
 	if (fpexc & FPEXC_EN) {
-		printk(KERN_DEBUG "%s: saving vfp state\n", __func__);
+		//printk(KERN_DEBUG "%s: saving vfp state\n", __func__);
 		vfp_save_state(&ti->vfpstate, fpexc);
 
 		/* disable, just in case */
 		fmxr(FPEXC, fmrx(FPEXC) & ~FPEXC_EN);
 	} else if (vfp_current_hw_state[ti->cpu]) {
+#ifndef CONFIG_SMP
 		fmxr(FPEXC, fpexc | FPEXC_EN);
 		vfp_save_state(vfp_current_hw_state[ti->cpu], fpexc);
 		fmxr(FPEXC, fpexc);
+#endif
 	}
 
 	/* clear any information we had about last context state */
-	memset(vfp_current_hw_state, 0, sizeof(vfp_current_hw_state));
+	vfp_current_hw_state[ti->cpu] = NULL;
 
 	return 0;
 }
@@ -571,6 +547,103 @@ void vfp_flush_hwstate(struct thread_info *thread)
 }
 
 /*
+ * Save the current VFP state into the provided structures and prepare
+ * for entry into a new function (signal handler).
+ */
+int vfp_preserve_user_clear_hwstate(struct user_vfp __user *ufp,
+				    struct user_vfp_exc __user *ufp_exc)
+{
+	struct thread_info *thread = current_thread_info();
+	struct vfp_hard_struct *hwstate = &thread->vfpstate.hard;
+	int err = 0;
+
+	/* Ensure that the saved hwstate is up-to-date. */
+	vfp_sync_hwstate(thread);
+
+	/*
+	 * Copy the floating point registers. There can be unused
+	 * registers see asm/hwcap.h for details.
+	 */
+	err |= __copy_to_user(&ufp->fpregs, &hwstate->fpregs,
+			      sizeof(hwstate->fpregs));
+	/*
+	 * Copy the status and control register.
+	 */
+	__put_user_error(hwstate->fpscr, &ufp->fpscr, err);
+
+	/*
+	 * Copy the exception registers.
+	 */
+	__put_user_error(hwstate->fpexc, &ufp_exc->fpexc, err);
+	__put_user_error(hwstate->fpinst, &ufp_exc->fpinst, err);
+	__put_user_error(hwstate->fpinst2, &ufp_exc->fpinst2, err);
+
+	if (err)
+		return -EFAULT;
+
+	/* Ensure that VFP is disabled. */
+	vfp_flush_hwstate(thread);
+
+	/*
+	 * As per the PCS, clear the length and stride bits for function
+	 * entry.
+	 */
+	hwstate->fpscr &= ~(FPSCR_LENGTH_MASK | FPSCR_STRIDE_MASK);
+
+	/*
+	 * Disable VFP in the hwstate so that we can detect if it gets
+	 * used.
+	 */
+	hwstate->fpexc &= ~FPEXC_EN;
+	return 0;
+}
+
+/* Sanitise and restore the current VFP state from the provided structures. */
+int vfp_restore_user_hwstate(struct user_vfp __user *ufp,
+			     struct user_vfp_exc __user *ufp_exc)
+{
+	struct thread_info *thread = current_thread_info();
+	struct vfp_hard_struct *hwstate = &thread->vfpstate.hard;
+	unsigned long fpexc;
+	int err = 0;
+
+	/*
+	 * If VFP has been used, then disable it to avoid corrupting
+	 * the new thread state.
+	 */
+	if (hwstate->fpexc & FPEXC_EN)
+		vfp_flush_hwstate(thread);
+
+	/*
+	 * Copy the floating point registers. There can be unused
+	 * registers see asm/hwcap.h for details.
+	 */
+	err |= __copy_from_user(&hwstate->fpregs, &ufp->fpregs,
+				sizeof(hwstate->fpregs));
+	/*
+	 * Copy the status and control register.
+	 */
+	__get_user_error(hwstate->fpscr, &ufp->fpscr, err);
+
+	/*
+	 * Sanitise and restore the exception registers.
+	 */
+	__get_user_error(fpexc, &ufp_exc->fpexc, err);
+
+	/* Ensure the VFP is enabled. */
+	fpexc |= FPEXC_EN;
+
+	/* Ensure FPINST2 is invalid and the exception flag is cleared. */
+	fpexc &= ~(FPEXC_EX | FPEXC_FP2V);
+	hwstate->fpexc = fpexc;
+
+	__get_user_error(hwstate->fpinst, &ufp_exc->fpinst, err);
+	__get_user_error(hwstate->fpinst2, &ufp_exc->fpinst2, err);
+
+	return err ? -EFAULT : 0;
+}
+
+/*
  * VFP hardware can lose all context when a CPU goes offline.
  * As we will be running in SMP mode with CPU hotplug, we will save the
  * hardware state at every thread switch.  We clear our held state when
@@ -632,7 +705,6 @@ static int __init vfp_init(void)
 		vfp_vector = vfp_support_entry;
 
 		thread_register_notifier(&vfp_notifier_block);
-		cpu_pm_register_notifier(&vfp_cpu_pm_notifier_block);
 		vfp_pm_init();
 
 		/*
@@ -645,11 +717,14 @@ static int __init vfp_init(void)
 			elf_hwcap |= HWCAP_VFPv3;
 
 			/*
-			 * Check for VFPv3 D16. CPUs in this configuration
-			 * only have 16 x 64bit registers.
+			 * Check for VFPv3 D16 and VFPv4 D16.  CPUs in
+			 * this configuration only have 16 x 64bit
+			 * registers.
 			 */
 			if (((fmrx(MVFR0) & MVFR0_A_SIMD_MASK)) == 1)
-				elf_hwcap |= HWCAP_VFPv3D16;
+				elf_hwcap |= HWCAP_VFPv3D16; /* also v4-D16 */
+			else
+				elf_hwcap |= HWCAP_VFPD32;
 		}
 #endif
 		/*
@@ -663,8 +738,10 @@ static int __init vfp_init(void)
 			if ((fmrx(MVFR1) & 0x000fff00) == 0x00011100)
 				elf_hwcap |= HWCAP_NEON;
 #endif
+#ifdef CONFIG_VFPv3
 			if ((fmrx(MVFR1) & 0xf0000000) == 0x10000000)
 				elf_hwcap |= HWCAP_VFPv4;
+#endif
 		}
 	}
 	return 0;
