@@ -220,6 +220,10 @@ config MACH_KAI
        help
          Support for NVIDIA KAI development platform
 
+config TEGRA_CPU_AP33
+       bool "AP33/1.5GHz"
+       depends on MACH_ENDEAVORU || MACH_ENDEAVORTD
+
 choice
        prompt "Tegra platform type"
        default TEGRA_SILICON_PLATFORM

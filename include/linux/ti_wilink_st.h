@@ -272,6 +272,8 @@ struct kim_data_s {
 	unsigned char dev_name[UART_DEV_NAME_LEN];
 	unsigned char flow_cntrl;
 	unsigned long baud_rate;
+	//wakelock
+	struct wake_lock ST_wakelock;
 };
 
 /**
@@ -452,6 +454,15 @@ struct ti_st_plat_data {
 	unsigned long baud_rate;
 	int (*suspend)(struct platform_device *, pm_message_t);
 	int (*resume)(struct platform_device *);
+<<<<<<< HEAD
+=======
+
+	int (*chip_enable) (void);
+	int (*chip_disable) (void);
+	int (*chip_asleep) (void);
+	int (*chip_awake) (void);
+
+>>>>>>> 732b714... update kernel source 1.18.1136.5
 };
 
 #endif /* TI_WILINK_ST_H */
