@@ -283,6 +283,6 @@ source "fs/dlm/Kconfig"
 
 # samsungs exfat driver
 
-source "fs/exfat_nofuse/Kconfig"
+source "fs/exfat/Kconfig"
 
 endmenu
