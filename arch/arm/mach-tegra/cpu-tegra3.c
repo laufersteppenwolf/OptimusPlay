@@ -440,7 +440,6 @@ static void tegra_auto_hotplug_work_func(struct work_struct *work)
 		hp_stats_update(cpu, up);
 	}
 	mutex_unlock(tegra3_cpu_lock);
-
 	if (system_state > SYSTEM_RUNNING) {
 		CPU_DEBUG_PRINTK(CPU_DEBUG_HOTPLUG, " system is not running\n");
 	} else if (cpu < nr_cpu_ids) {
