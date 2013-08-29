@@ -293,7 +293,7 @@ void die(const char *str, struct pt_regs *regs, int err)
 
 	bust_spinlocks(0);
 	add_taint(TAINT_DIE);
-	raw_spin_unlock_irq(&die_lock)
+	raw_spin_unlock_irq(&die_lock);
 
 #if defined(CONFIG_MFD_MAX77663_FOR_USED_SCRATCH_REGISTER)
 	max77663_set_ScratchRegister(MAX77663_SCRATCH_REG_RESET);
