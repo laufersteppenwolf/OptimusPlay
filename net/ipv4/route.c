@@ -2832,8 +2832,6 @@ struct rtable *__ip_route_output_key(struct net *net, struct flowi4 *flp4)
 	struct rtable *rth;
 	unsigned int hash;
 
-<<<<<<< HEAD
-=======
 	if (IS_ERR(net) || (!net)) {
 		printk("[NET] net is NULL in %s\n", __func__);
 		return NULL;
@@ -2844,7 +2842,6 @@ struct rtable *__ip_route_output_key(struct net *net, struct flowi4 *flp4)
 		return NULL;
 	}
 
->>>>>>> 732b714... update kernel source 1.18.1136.5
 	if (!rt_caching(net))
 		goto slow_output;
 
@@ -3367,9 +3364,9 @@ static struct ctl_table empty[1];
 
 static struct ctl_table ipv4_skeleton[] =
 {
-	{ .procname = "route", 
+	{ .procname = "route",
 	  .mode = 0555, .child = ipv4_route_table},
-	{ .procname = "neigh", 
+	{ .procname = "neigh",
 	  .mode = 0555, .child = empty},
 	{ }
 };

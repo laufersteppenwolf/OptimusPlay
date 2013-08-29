@@ -37,12 +37,8 @@
 
 #include <linux/skbuff.h>
 #include <linux/ti_wilink_st.h>
-<<<<<<< HEAD
-#include <linux/serial_core.h>
-=======
 #include <linux/rfkill.h>
 #include <linux/suspend.h>
->>>>>>> 732b714... update kernel source 1.18.1136.5
 
 #define PM_QOS_TUNING_SUPPORTED
 #ifdef PM_QOS_TUNING_SUPPORTED
@@ -489,17 +485,12 @@ long st_kim_start(void *kim_data)
 	blue_pincfg_uartc_resume();
 
 	do {
-<<<<<<< HEAD
-		/* platform specific enabling code here */
-		wake_lock(&kim_gdata->core_data->st_wk_lock);
-=======
 
 		printk("\n[BT_GPS] nshutdown gpio new: %d\n", kim_gdata->nshutdown);
 
 		if (pdata->chip_enable)
 			pdata->chip_enable();
 
->>>>>>> 732b714... update kernel source 1.18.1136.5
 		/* Configure BT nShutdown to HIGH state */
 		gpio_set_value(kim_gdata->nshutdown, GPIO_LOW);
 		mdelay(5);	/* FIXME: a proper toggle */
@@ -593,13 +584,10 @@ long st_kim_stop(void *kim_data)
 {
 	long err = 0;
 	struct kim_data_s	*kim_gdata = (struct kim_data_s *)kim_data;
-<<<<<<< HEAD
-=======
 
 	struct ti_st_plat_data	*pdata =
 		kim_gdata->kim_pdev->dev.platform_data;
 	struct tty_struct	*tty = kim_gdata->core_data->tty;
->>>>>>> 732b714... update kernel source 1.18.1136.5
 
 	INIT_COMPLETION(kim_gdata->ldisc_installed);
 
@@ -633,15 +621,11 @@ long st_kim_stop(void *kim_data)
 	gpio_set_value(kim_gdata->nshutdown, GPIO_LOW);
 
 	/* platform specific disable */
-<<<<<<< HEAD
-	wake_unlock(&kim_gdata->core_data->st_wk_lock);
-=======
 	if (pdata->chip_disable)
 		pdata->chip_disable();
 
 	blue_pincfg_uartc_suspend();
 
->>>>>>> 732b714... update kernel source 1.18.1136.5
 	return err;
 }
 
@@ -873,8 +857,6 @@ static int kim_probe(struct platform_device *pdev)
 	/* refer to itself */
 	kim_gdata->core_data->kim_data = kim_gdata;
 
-	wake_lock_init(&kim_gdata->core_data->st_wk_lock, WAKE_LOCK_SUSPEND,
-				"st_wake_lock");
 	/* Claim the chip enable nShutdown gpio from the system */
 	kim_gdata->nshutdown = pdata->nshutdown_gpio;
 
@@ -980,13 +962,11 @@ static int kim_remove(struct platform_device *pdev)
 	sysfs_remove_group(&pdev->dev.kobj, &uim_attr_grp);
 	pr_info("sysfs entries removed\n");
 
-	wake_lock_destroy(&kim_gdata->core_data->st_wk_lock);
 	kim_gdata->kim_pdev = NULL;
 	st_core_exit(kim_gdata->core_data);
 
 	kfree(kim_gdata);
 	kim_gdata = NULL;
-
 	return 0;
 }
 
@@ -995,12 +975,6 @@ static unsigned long retry_suspend;
 
 int kim_suspend(struct platform_device *pdev, pm_message_t state)
 {
-<<<<<<< HEAD
-	struct kim_data_s *kim_gdata;
-	struct st_data_s *core_data;
-	struct uart_state *uart_state;
-	struct uart_port *uport;
-=======
 	struct ti_st_plat_data	*pdata = pdev->dev.platform_data;
 	struct kim_data_s	*kim_gdata;
 
@@ -1024,26 +998,21 @@ int kim_suspend(struct platform_device *pdev, pm_message_t state)
 	    uart_state = core_data->tty->driver_data;
             uport = uart_state->uart_port;
 	}
->>>>>>> 732b714... update kernel source 1.18.1136.5
 
-	kim_gdata = dev_get_drvdata(&pdev->dev);
-	core_data = kim_gdata->core_data;
+	if (pdata->suspend)
+		return pdata->suspend(pdev, state);
 
-	if (st_ll_getstate(core_data) != ST_LL_INVALID) {
-		uart_state = core_data->tty->driver_data;
-		uport = uart_state->uart_port;
-#ifdef CONFIG_BT_TIBLUESLEEP
-		pr_info(" Bluesleep Start");
-		bluesleep_start(uport);
-#endif
-	}
-
-	return 0;
+	return -EOPNOTSUPP;
 }
 
 int kim_resume(struct platform_device *pdev)
 {
-	return 0;
+	struct ti_st_plat_data	*pdata = pdev->dev.platform_data;
+
+	if (pdata->resume)
+		return pdata->resume(pdev);
+
+	return -EOPNOTSUPP;
 }
 
 /**********************************************************************/
