@@ -26,6 +26,7 @@
 #include <linux/mmc/sd.h>
 #include <linux/regulator/consumer.h>
 #include <linux/delay.h>
+#include <linux/sched.h>
 
 #include <mach/gpio.h>
 #include <mach/sdhci.h>
@@ -969,6 +970,8 @@ static int __devinit sdhci_tegra_probe(struct platform_device *pdev)
 	struct tegra_sdhci_host *tegra_host;
 	struct clk *clk;
 	int rc;
+
+	sched_setaffinity(0, cpumask_of(0));
 
 	host = sdhci_pltfm_init(pdev, &sdhci_tegra_pdata);
 	if (IS_ERR(host))
