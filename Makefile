@@ -369,7 +369,7 @@ KBUILD_CFLAGS   := -O3 -fmodulo-sched -fmodulo-sched-allow-regmoves -fno-tree-ve
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
-		   -fno-delete-null-pointer-checks -mno-unaligned-access
+		   -fno-delete-null-pointer-checks
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
 KBUILD_AFLAGS   := -D__ASSEMBLY__
